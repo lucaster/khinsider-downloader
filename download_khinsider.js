@@ -142,9 +142,11 @@ function parseAnchorLinks(baseUrl, html) {
   while ((match = anchorRegex.exec(html))) {
     const href = match[2].trim();
     const text = match[3].replace(/<[^>]+>/g, ' ').trim();
+    const index = match.index || 0;
+    const before = html.slice(Math.max(0, index - 200), index);
     try {
       const absoluteUrl = new URL(href, baseUrl).toString();
-      anchors.push({ href: absoluteUrl, text });
+      anchors.push({ href: absoluteUrl, text, index, before });
     } catch (_) {
       // ignore invalid URLs
     }
@@ -199,15 +201,43 @@ function extractAlbumTracks(albumUrl, html) {
     const cleanHref = stripUrlQuery(anchor.href);
     if (!cleanHref.toLowerCase().endsWith('.mp3')) continue;
 
-    if (!tracks.has(cleanHref)) {
-      tracks.set(cleanHref, { href: cleanHref, titles: [] });
+    // attempt to extract a track number from the anchor text or nearby HTML
+    let trackNum = null;
+    let titleText = anchor.text;
+
+    // 1) check if the anchor text itself starts with a track number like "1. Title" or "01) Title"
+    const textNumMatch = /^\s*(\d{1,3})\s*[\.)\-]\s*(.+)$/s.exec(titleText);
+    if (textNumMatch) {
+      trackNum = parseInt(textNumMatch[1], 10);
+      titleText = textNumMatch[2].trim();
     }
-    tracks.get(cleanHref).titles.push(anchor.text);
+
+    // 2) if not found, inspect the HTML before the anchor for a table cell or numbering
+    if (trackNum === null && anchor.before) {
+      // look for a nearby <td>NUMBER</td>
+      const tdMatch = /<td[^>]*>\s*(\d{1,3})\s*<\/td>\s*$/i.exec(anchor.before);
+      if (tdMatch) {
+        trackNum = parseInt(tdMatch[1], 10);
+      } else {
+        // look for a plain number followed by a dot just before the anchor
+        const plainMatch = /(\d{1,3})\s*[\.)]\s*$/i.exec(anchor.before.replace(/<[^>]+>/g, ' '));
+        if (plainMatch) trackNum = parseInt(plainMatch[1], 10);
+      }
+    }
+
+    if (!tracks.has(cleanHref)) {
+      tracks.set(cleanHref, { href: cleanHref, titles: [], numbers: [] });
+    }
+    tracks.get(cleanHref).titles.push(titleText);
+    if (trackNum !== null && !tracks.get(cleanHref).numbers.includes(trackNum)) {
+      tracks.get(cleanHref).numbers.push(trackNum);
+    }
   }
 
   return Array.from(tracks.values()).map((track) => ({
     href: track.href,
     title: chooseSongTitle(track.titles, track.href),
+    number: track.numbers && track.numbers.length > 0 ? track.numbers[0] : null,
   }));
 }
 
@@ -277,9 +307,23 @@ function uniqueLinks(links) {
   });
 }
 
+function filenameFromTrack(track) {
+  const title = track && track.text ? track.text : (track && track.title ? track.title : null);
+  const href = track && track.href ? track.href : (track && track.href ? track.href : null);
+  const sanitized = sanitizeFilename(title || (href ? path.basename(new URL(href).pathname) : 'track'));
+  const nameWithExt = sanitized.toLowerCase().endsWith('.mp3') ? sanitized : `${sanitized}.mp3`;
+
+  if (track && typeof track.number === 'number' && !Number.isNaN(track.number)) {
+    const num = String(track.number).padStart(2, '0');
+    return `${num} - ${nameWithExt}`;
+  }
+
+  return nameWithExt;
+}
+
+// backwards-compatible helper in case other code calls filenameFromTitle
 function filenameFromTitle(title, href) {
-  const sanitized = sanitizeFilename(title || path.basename(new URL(href).pathname));
-  return sanitized.toLowerCase().endsWith('.mp3') ? sanitized : `${sanitized}.mp3`;
+  return filenameFromTrack({ text: title, href });
 }
 
 function getUniqueFilename(filename, seen) {
@@ -327,7 +371,7 @@ async function run() {
         console.warn(`Warning: no direct MP3 download link found for ${track.title || track.href}`);
         continue;
       }
-      mp3Links.push({ href: directMp3, text: track.title });
+      mp3Links.push({ href: directMp3, text: track.title, number: track.number });
       trackPagesScanned += 1;
     } catch (error) {
       console.warn(`Warning: failed to retrieve track page ${track.href}: ${error.message}`);
@@ -345,7 +389,10 @@ async function run() {
   console.log(`Found ${mp3Links.length} MP3 track${mp3Links.length === 1 ? '' : 's'}` + (trackPagesScanned ? ` after scanning ${trackPagesScanned} track page${trackPagesScanned === 1 ? '' : 's'}` : '') + '.');
 
   if (dryRun) {
-    mp3Links.forEach((link) => console.log(link.href));
+    mp3Links.forEach((link) => {
+      const filename = filenameFromTrack(link);
+      console.log(`${filename} -> ${link.href}`);
+    });
     return;
   }
 
@@ -356,7 +403,7 @@ async function run() {
   const usedFilenames = new Set();
 
   for (const link of mp3Links) {
-    const baseFilename = filenameFromTitle(link.text, link.href);
+    const baseFilename = filenameFromTrack(link);
     const filename = getUniqueFilename(baseFilename, usedFilenames);
     const destination = path.join(outputDir, filename);
 
