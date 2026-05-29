@@ -143,7 +143,7 @@ function parseAnchorLinks(baseUrl, html) {
     const href = match[2].trim();
     const text = match[3].replace(/<[^>]+>/g, ' ').trim();
     const index = match.index || 0;
-    const before = html.slice(Math.max(0, index - 200), index);
+    const before = html.slice(Math.max(0, index - 400), index);
     try {
       const absoluteUrl = new URL(href, baseUrl).toString();
       anchors.push({ href: absoluteUrl, text, index, before });
@@ -201,8 +201,9 @@ function extractAlbumTracks(albumUrl, html) {
     const cleanHref = stripUrlQuery(anchor.href);
     if (!cleanHref.toLowerCase().endsWith('.mp3')) continue;
 
-    // attempt to extract a track number from the anchor text or nearby HTML
+    // attempt to extract a CD and track number from the anchor text or nearby HTML
     let trackNum = null;
+    let cdNum = null;
     let titleText = anchor.text;
 
     // 1) check if the anchor text itself starts with a track number like "1. Title" or "01) Title"
@@ -212,25 +213,45 @@ function extractAlbumTracks(albumUrl, html) {
       titleText = textNumMatch[2].trim();
     }
 
-    // 2) if not found, inspect the HTML before the anchor for a table cell or numbering
-    if (trackNum === null && anchor.before) {
-      // look for a nearby <td>NUMBER</td>
-      const tdMatch = /<td[^>]*>\s*(\d{1,3})\s*<\/td>\s*$/i.exec(anchor.before);
-      if (tdMatch) {
-        trackNum = parseInt(tdMatch[1], 10);
+    // 2) if not found, inspect the HTML before the anchor for table cells or numbering
+    if (anchor.before) {
+      // Attempt to find two consecutive <td>NUMBER</td> entries immediately before the song cell
+      const twoTdMatch = /<td[^>]*>\s*(\d{1,3})\s*<\/td>\s*<td[^>]*>\s*(\d{1,3})\s*<\/td>\s*$/i.exec(anchor.before);
+      if (twoTdMatch) {
+        // first is CD, second is track
+        cdNum = parseInt(twoTdMatch[1], 10);
+        trackNum = parseInt(twoTdMatch[2], 10);
       } else {
-        // look for a plain number followed by a dot just before the anchor
-        const plainMatch = /(\d{1,3})\s*[\.)]\s*$/i.exec(anchor.before.replace(/<[^>]+>/g, ' '));
-        if (plainMatch) trackNum = parseInt(plainMatch[1], 10);
+        // collect all <td>...</td> contents and extract numbers inside them (handles nested tags)
+        const tdContents = Array.from(anchor.before.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/ig)).map((m) => m[1].replace(/<[^>]+>/g, ' ').trim());
+        const tdNums = tdContents.map((c) => {
+          const nm = /\b(\d{1,3})\b/.exec(c);
+          return nm ? parseInt(nm[1], 10) : null;
+        }).filter((n) => n !== null);
+
+        if (tdNums.length >= 2) {
+          cdNum = tdNums[tdNums.length - 2];
+          trackNum = tdNums[tdNums.length - 1];
+        } else if (tdNums.length === 1 && trackNum === null) {
+          // only one number found in a nearby <td>, assume it's the track number
+          trackNum = tdNums[0];
+        } else if (trackNum === null) {
+          // fallback: look for a plain number followed by a dot just before the anchor
+          const plainMatch = /(\d{1,3})\s*[\.)]\s*$/i.exec(anchor.before.replace(/<[^>]+>/g, ' '));
+          if (plainMatch) trackNum = parseInt(plainMatch[1], 10);
+        }
       }
     }
 
     if (!tracks.has(cleanHref)) {
-      tracks.set(cleanHref, { href: cleanHref, titles: [], numbers: [] });
+      tracks.set(cleanHref, { href: cleanHref, titles: [], numbers: [], cds: [] });
     }
     tracks.get(cleanHref).titles.push(titleText);
     if (trackNum !== null && !tracks.get(cleanHref).numbers.includes(trackNum)) {
       tracks.get(cleanHref).numbers.push(trackNum);
+    }
+    if (cdNum !== null && !tracks.get(cleanHref).cds.includes(cdNum)) {
+      tracks.get(cleanHref).cds.push(cdNum);
     }
   }
 
@@ -238,6 +259,7 @@ function extractAlbumTracks(albumUrl, html) {
     href: track.href,
     title: chooseSongTitle(track.titles, track.href),
     number: track.numbers && track.numbers.length > 0 ? track.numbers[0] : null,
+    cd: track.cds && track.cds.length > 0 ? track.cds[0] : null,
   }));
 }
 
@@ -313,6 +335,14 @@ function filenameFromTrack(track) {
   const sanitized = sanitizeFilename(title || (href ? path.basename(new URL(href).pathname) : 'track'));
   const nameWithExt = sanitized.toLowerCase().endsWith('.mp3') ? sanitized : `${sanitized}.mp3`;
 
+  // If we have both CD and track numbers, prefix with CD then track (both two digits)
+  if (track && typeof track.cd === 'number' && !Number.isNaN(track.cd) && typeof track.number === 'number' && !Number.isNaN(track.number)) {
+    const cd = String(track.cd).padStart(2, '0');
+    const num = String(track.number).padStart(2, '0');
+    return `${cd} - ${num} - ${nameWithExt}`;
+  }
+
+  // If only track number is known, keep previous behavior
   if (track && typeof track.number === 'number' && !Number.isNaN(track.number)) {
     const num = String(track.number).padStart(2, '0');
     return `${num} - ${nameWithExt}`;
@@ -371,7 +401,7 @@ async function run() {
         console.warn(`Warning: no direct MP3 download link found for ${track.title || track.href}`);
         continue;
       }
-      mp3Links.push({ href: directMp3, text: track.title, number: track.number });
+      mp3Links.push({ href: directMp3, text: track.title, number: track.number, cd: track.cd });
       trackPagesScanned += 1;
     } catch (error) {
       console.warn(`Warning: failed to retrieve track page ${track.href}: ${error.message}`);
