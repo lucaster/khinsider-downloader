@@ -9,8 +9,3 @@ node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/albu
 node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/endorfun-1995-windows
 node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/death-stranding-2019
 node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/death-stranding-original-score-volume-2
-node download_khinsider.js
-node download_khinsider.js
-node download_khinsider.js
-node download_khinsider.js
-node download_khinsider.js
