@@ -1,0 +1,16 @@
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/rumble-roses-xx-xbox-360-gamerip-2006
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/rumble-roses-xx-original-soundtrack
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/champion-wrestler-arcade
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/metal-gear-solid-2-sons-of-liberty-original-soundtrack
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/metal-gear-solid-ps1-gamerip-1998
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/rumble-roses-2004-ps2-gamerip
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/rumble-roses
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/neo-turf-masters-neo-geo-arcade
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/endorfun-1995-windows
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/death-stranding-2019
+node download_khinsider.js https://downloads.khinsider.com/game-soundtracks/album/death-stranding-original-score-volume-2
+node download_khinsider.js
+node download_khinsider.js
+node download_khinsider.js
+node download_khinsider.js
+node download_khinsider.js
