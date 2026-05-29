@@ -274,6 +274,26 @@ function filenameFromTitle(title, href) {
   return sanitized.toLowerCase().endsWith('.mp3') ? sanitized : `${sanitized}.mp3`;
 }
 
+function getUniqueFilename(filename, seen) {
+  if (!seen.has(filename)) {
+    seen.add(filename);
+    return filename;
+  }
+
+  const extension = path.extname(filename);
+  const baseName = filename.slice(0, filename.length - extension.length);
+  let index = 2;
+  let candidate = `${baseName} (${index})${extension}`;
+
+  while (seen.has(candidate)) {
+    index += 1;
+    candidate = `${baseName} (${index})${extension}`;
+  }
+
+  seen.add(candidate);
+  return candidate;
+}
+
 async function run() {
   console.log(`Fetching album page: ${urlArg}`);
 
@@ -325,9 +345,11 @@ async function run() {
   let downloaded = 0;
   let skipped = 0;
   let failed = 0;
+  const usedFilenames = new Set();
 
   for (const link of mp3Links) {
-    const filename = filenameFromTitle(link.text, link.href);
+    const baseFilename = filenameFromTitle(link.text, link.href);
+    const filename = getUniqueFilename(baseFilename, usedFilenames);
     const destination = path.join(outputDir, filename);
 
     if (fs.existsSync(destination) && !replaceExisting) {
