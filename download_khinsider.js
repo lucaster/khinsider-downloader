@@ -126,6 +126,23 @@ function downloadStream(url, destination) {
   });
 }
 
+async function downloadWithRetries(url, destination, attempts = 3) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      if (attempt > 1 && fs.existsSync(destination)) {
+        fs.unlinkSync(destination);
+      }
+      await downloadStream(url, destination);
+      return;
+    } catch (error) {
+      if (attempt === attempts) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+}
+
 function parseAnchorLinks(baseUrl, html) {
   const anchors = [];
   const anchorRegex = /<a\b[^>]*\bhref=(['"])([^'">]+)\1[^>]*>([\s\S]*?)<\/a>/gi;
@@ -360,7 +377,7 @@ async function run() {
 
     process.stdout.write(`Downloading ${filename} ... `);
     try {
-      await downloadStream(link.href, destination);
+      await downloadWithRetries(link.href, destination, 3);
       console.log('done');
       downloaded += 1;
     } catch (error) {
