@@ -50,15 +50,6 @@ function getDefaultOutputDir(albumUrl) {
   return process.cwd();
 }
 
-function getAlbumOutputDir(albumUrl, html) {
-  const titleMatch = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html) || /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-  if (title) {
-    return path.join(process.cwd(), sanitizeFilename(title));
-  }
-  return getDefaultOutputDir(albumUrl);
-}
-
 function getArgValue(option) {
   const index = args.indexOf(option);
   return index >= 0 && index + 1 < args.length ? args[index + 1] : undefined;
@@ -315,7 +306,7 @@ async function run() {
   console.log(`Fetching album page: ${urlArg}`);
 
   const html = await httpGetText(urlArg);
-  const outputDir = getArgValue('--output-dir') || getAlbumOutputDir(urlArg, html);
+  const outputDir = getArgValue('--output-dir') || getDefaultOutputDir(urlArg);
   const albumTracks = extractAlbumTracks(urlArg, html);
   let mp3Links = [];
   let trackPagesScanned = 0;
