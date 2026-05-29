@@ -13,6 +13,7 @@ Options:
   --output-dir dir   save MP3 files into dir (defaults to the album slug folder)
   --replace          overwrite existing files with the same name
   --dry-run          list discovered MP3 files without downloading
+  --playlist         create an M3U playlist in the output folder after downloads
   -h, --help         show this help text
 `;
 
@@ -36,6 +37,7 @@ if (!urlArg) {
 
 const replaceExisting = args.includes('--replace');
 const dryRun = args.includes('--dry-run');
+const createPlaylist = args.includes('--playlist');
 
 function getDefaultOutputDir(albumUrl) {
   try {
@@ -456,6 +458,18 @@ async function run() {
   }
 
   console.log(`\nSummary: downloaded ${downloaded}, skipped ${skipped}, failed ${failed}.`);
+
+  if (createPlaylist && !dryRun) {
+    try {
+      const mp3Files = fs.readdirSync(outputDir).filter((f) => f.toLowerCase().endsWith('.mp3')).sort();
+      const playlistName = path.basename(outputDir);
+      const playlistPath = path.join(outputDir, `${playlistName}.m3u`);
+      fs.writeFileSync(playlistPath, '#EXTM3U\n' + mp3Files.join('\n'));
+      console.log(`Playlist written: ${playlistPath}`);
+    } catch (err) {
+      console.warn(`Warning: failed to write playlist: ${err.message}`);
+    }
+  }
 }
 
 run().catch((error) => {
